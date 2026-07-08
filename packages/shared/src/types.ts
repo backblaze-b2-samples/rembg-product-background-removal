@@ -57,3 +57,109 @@ export interface UploadStats {
   uploads_today: number;
   total_downloads: number;
 }
+
+// --- Product catalog (rembg background removal) ---
+
+export type ProductStatus = "pending" | "done";
+
+export const REMBG_MODELS = [
+  "u2net",
+  "u2netp",
+  "isnet-general-use",
+  "u2net_human_seg",
+  "silueta",
+] as const;
+export type RembgModel = (typeof REMBG_MODELS)[number];
+
+export const PRODUCT_CATEGORIES = [
+  "Apparel",
+  "Footwear",
+  "Accessories",
+  "Electronics",
+  "Home",
+  "Beauty",
+  "Other",
+] as const;
+export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+
+export interface RemovalSidecar {
+  model: string;
+  rembg_version: string;
+  processing_ms: number;
+  width: number;
+  height: number;
+  // Honest coverage proxy (fraction of pixels above alpha threshold), NOT a
+  // model confidence score.
+  foreground_ratio: number;
+  alpha_matting: boolean;
+  created_at: string;
+}
+
+export interface Product {
+  sku: string;
+  category: string;
+  batch: string | null;
+  original_filename: string;
+  original_key: string;
+  model: string;
+  alpha_matting: boolean;
+  status: ProductStatus;
+  created_at: string;
+  updated_at: string;
+  cutout_key: string | null;
+  thumbnail_url: string | null;
+}
+
+export interface ProductDetail extends Product {
+  original_url: string | null;
+  cutout_url: string | null;
+  sidecar: RemovalSidecar | null;
+}
+
+export interface RemovalResult {
+  sku: string;
+  cutout_key: string;
+  sidecar: RemovalSidecar;
+}
+
+export interface BatchRemovalResult {
+  processed: number;
+  failed: number;
+  results: RemovalResult[];
+}
+
+export interface CatalogStats {
+  total_products: number;
+  cutouts_produced: number;
+  pending: number;
+  originals_bytes: number;
+  originals_human: string;
+  cutouts_bytes: number;
+  cutouts_human: string;
+  amplification_ratio: number;
+  avg_processing_ms: number;
+}
+
+export interface DailyCutoutCount {
+  date: string;
+  cutouts: number;
+}
+
+export interface ImportRow {
+  sku: string;
+  status: string;
+  detail: string | null;
+}
+
+export interface ImportResult {
+  created: number;
+  skipped: number;
+  rows: ImportRow[];
+}
+
+export interface ProductUpdate {
+  category?: string;
+  batch?: string | null;
+  model?: string;
+  alpha_matting?: boolean;
+}

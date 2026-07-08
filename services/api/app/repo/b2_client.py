@@ -28,9 +28,9 @@ def _split_key(key: str) -> tuple[str, str]:
 
 def _public_url(key: str) -> str | None:
     """Build a public URL for an object key, percent-encoding the path."""
-    if not settings.b2_public_url:
+    if not settings.b2_public_url_base:
         return None
-    return f"{settings.b2_public_url}/{quote(key, safe='/')}"
+    return f"{settings.b2_public_url_base}/{quote(key, safe='/')}"
 
 
 @functools.lru_cache(maxsize=1)
@@ -38,11 +38,12 @@ def get_s3_client():
     return boto3.client(
         "s3",
         endpoint_url=settings.b2_endpoint,
-        aws_access_key_id=settings.b2_key_id,
+        region_name=settings.b2_region,
+        aws_access_key_id=settings.b2_application_key_id,
         aws_secret_access_key=settings.b2_application_key,
         config=Config(
             signature_version="s3v4",
-            user_agent_extra="b2ai-oss-start",
+            user_agent_extra="b2ai-rembg-cutouts",
         ),
     )
 
@@ -202,3 +203,83 @@ def get_upload_stats() -> dict:
         "total_size_human": humanize_bytes(total_size),
         "uploads_today": uploads_today,
     }
+
+
+# --- Raw byte + prefix helpers (used by the removal engine + catalog) ---
+
+
+def get_object_bytes(key: str) -> bytes | None:
+    """Fetch raw object bytes from B2. Returns None on 404, raises otherwise."""
+    client = get_s3_client()
+    try:
+        response = client.get_object(Bucket=settings.b2_bucket_name, Key=key)
+        return response["Body"].read()
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("404", "NoSuchKey"):
+            return None
+        raise RuntimeError(f"B2 get_object failed for '{key}': {e}") from e
+
+
+def put_bytes(key: str, data: bytes, content_type: str) -> None:
+    """Write raw bytes to B2 at `key`. Raises RuntimeError on failure."""
+    client = get_s3_client()
+    try:
+        client.put_object(
+            Bucket=settings.b2_bucket_name,
+            Key=key,
+            Body=io.BytesIO(data),
+            ContentType=content_type,
+        )
+    except ClientError as e:
+        raise RuntimeError(f"B2 put_object failed for '{key}': {e}") from e
+
+
+def list_prefix(prefix: str, max_keys: int = 1000) -> list[dict]:
+    """Return raw S3 object dicts (Key, Size, LastModified) under a prefix.
+
+    Paginated. Raises RuntimeError on S3 failure.
+    """
+    client = get_s3_client()
+    contents: list[dict] = []
+    kwargs: dict = {
+        "Bucket": settings.b2_bucket_name,
+        "Prefix": prefix,
+        "MaxKeys": max_keys,
+    }
+    try:
+        while True:
+            response = client.list_objects_v2(**kwargs)
+            contents.extend(response.get("Contents", []))
+            if not response.get("IsTruncated"):
+                break
+            kwargs["ContinuationToken"] = response["NextContinuationToken"]
+    except ClientError as e:
+        raise RuntimeError(f"B2 list failed for prefix '{prefix}': {e}") from e
+    return contents
+
+
+def delete_prefix(prefix: str) -> int:
+    """Delete every object under a (non-empty) prefix. Returns count deleted.
+
+    Guards against an empty prefix so a bug can never wipe the whole bucket.
+    Uses batched delete_objects. Raises RuntimeError on S3 failure.
+    """
+    if not prefix:
+        raise ValueError("delete_prefix requires a non-empty prefix")
+    client = get_s3_client()
+    objects = list_prefix(prefix)
+    deleted = 0
+    try:
+        for i in range(0, len(objects), 1000):
+            batch = [{"Key": o["Key"]} for o in objects[i : i + 1000]]
+            if not batch:
+                continue
+            client.delete_objects(
+                Bucket=settings.b2_bucket_name,
+                Delete={"Objects": batch, "Quiet": True},
+            )
+            deleted += len(batch)
+    except ClientError as e:
+        raise RuntimeError(f"B2 delete failed for prefix '{prefix}': {e}") from e
+    return deleted

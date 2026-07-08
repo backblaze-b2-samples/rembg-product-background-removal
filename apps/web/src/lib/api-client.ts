@@ -1,9 +1,17 @@
 import type {
+  BatchRemovalResult,
+  CatalogStats,
+  DailyCutoutCount,
   DailyUploadCount,
   FileMetadata,
   FileUploadResponse,
+  ImportResult,
+  Product,
+  ProductDetail,
+  ProductUpdate,
+  RemovalResult,
   UploadStats,
-} from "@vibe-coding-starter-kit/shared";
+} from "@rembg-product-background-removal/shared";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -207,5 +215,83 @@ export function uploadFile(
 
     xhr.open("POST", `${API_BASE}/upload`);
     xhr.send(formData);
+  });
+}
+
+// --- Product catalog (rembg background removal) ---
+
+export async function getProducts() {
+  return apiFetch<Product[]>("/products");
+}
+
+export async function getProduct(sku: string) {
+  return apiFetch<ProductDetail>(`/products/${encodeURIComponent(sku)}`);
+}
+
+export async function getCatalogStats() {
+  return apiFetch<CatalogStats>("/products/stats");
+}
+
+export async function getCutoutActivity(days = 7) {
+  return apiFetch<DailyCutoutCount[]>(`/products/stats/activity?days=${days}`);
+}
+
+export interface CreateProductInput {
+  file: File;
+  sku: string;
+  category: string;
+  batch?: string;
+  model: string;
+  alpha_matting: boolean;
+  remove_now: boolean;
+}
+
+export async function createProduct(input: CreateProductInput) {
+  const form = new FormData();
+  form.append("file", input.file);
+  form.append("sku", input.sku);
+  form.append("category", input.category);
+  if (input.batch) form.append("batch", input.batch);
+  form.append("model", input.model);
+  form.append("alpha_matting", String(input.alpha_matting));
+  form.append("remove_now", String(input.remove_now));
+  return apiFetch<Product>("/products", { method: "POST", body: form });
+}
+
+export async function updateProduct(sku: string, update: ProductUpdate) {
+  return apiFetch<Product>(`/products/${encodeURIComponent(sku)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(update),
+  });
+}
+
+export async function deleteProduct(sku: string) {
+  return apiFetch<{ deleted: boolean; sku: string }>(
+    `/products/${encodeURIComponent(sku)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function runRemoval(sku: string) {
+  return apiFetch<RemovalResult>(
+    `/products/${encodeURIComponent(sku)}/remove`,
+    { method: "POST" },
+  );
+}
+
+export async function runPending() {
+  return apiFetch<BatchRemovalResult>("/products/remove-pending", {
+    method: "POST",
+  });
+}
+
+export async function importProducts(manifest: File, files: File[]) {
+  const form = new FormData();
+  form.append("manifest", manifest);
+  for (const f of files) form.append("files", f);
+  return apiFetch<ImportResult>("/products/import", {
+    method: "POST",
+    body: form,
   });
 }

@@ -3,13 +3,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
+  type CreateProductInput,
+  createProduct,
   deleteFile,
+  deleteProduct,
+  getCatalogStats,
+  getCutoutActivity,
   getFiles,
   getFileStats,
   getPreviewUrl,
+  getProduct,
+  getProducts,
   getUploadActivity,
+  importProducts,
+  runPending,
+  runRemoval,
+  updateProduct,
 } from "@/lib/api-client";
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type {
+  FileMetadata,
+  Product,
+  ProductUpdate,
+} from "@rembg-product-background-removal/shared";
 
 // Single source of truth for query keys. Keep these tightly scoped so that
 // invalidating "files" doesn't blow away unrelated caches, and so an IDE
@@ -22,6 +37,11 @@ export const qk = {
   uploadActivity: (days: number) =>
     [...qk.all, "stats", "activity", days] as const,
   preview: (key: string) => [...qk.all, "preview", key] as const,
+  products: () => [...qk.all, "products"] as const,
+  product: (sku: string) => [...qk.all, "products", sku] as const,
+  catalogStats: () => [...qk.all, "catalog-stats"] as const,
+  cutoutActivity: (days: number) =>
+    [...qk.all, "catalog-stats", "activity", days] as const,
 };
 
 export function useFiles(prefix = "", limit = 100) {
@@ -66,5 +86,91 @@ export function useDeleteFile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.all });
     },
+  });
+}
+
+// --- Product catalog hooks ---
+
+export function useProducts() {
+  return useQuery<Product[], ApiError>({
+    queryKey: qk.products(),
+    queryFn: getProducts,
+  });
+}
+
+export function useProduct(sku: string | undefined) {
+  return useQuery({
+    queryKey: qk.product(sku ?? ""),
+    queryFn: () => getProduct(sku as string),
+    enabled: !!sku,
+  });
+}
+
+export function useCatalogStats() {
+  return useQuery({
+    queryKey: qk.catalogStats(),
+    queryFn: getCatalogStats,
+  });
+}
+
+export function useCutoutActivity(days = 7) {
+  return useQuery({
+    queryKey: qk.cutoutActivity(days),
+    queryFn: () => getCutoutActivity(days),
+  });
+}
+
+// Every catalog mutation invalidates the whole "b2" tree — product lists,
+// detail, and dashboard aggregations all re-fetch lazily.
+function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: qk.all });
+}
+
+export function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateProductInput) => createProduct(input),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useUpdateProduct(sku: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (update: ProductUpdate) => updateProduct(sku, update),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sku: string) => deleteProduct(sku),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useRunRemoval() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sku: string) => runRemoval(sku),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useRunPending() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => runPending(),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useImportProducts() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ manifest, files }: { manifest: File; files: File[] }) =>
+      importProducts(manifest, files),
+    onSuccess: () => invalidateAll(qc),
   });
 }

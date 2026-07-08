@@ -1,0 +1,19 @@
+# Heavy background-removal dependencies — installed SEPARATELY from
+# requirements.txt so the core API installs and its tests run fast and green
+# without them. service/removal.py lazy-imports everything here.
+#
+#   pip install -r requirements.txt         # core API (no ML)
+#   pip install -r requirements-ml.txt      # rembg engine
+#
+# First run downloads the selected U2Net model (~176 MB for u2net) to ~/.u2net/
+# from GitHub — network is required on first use only.
+#
+# NOTE: a green `pnpm test:api` does NOT prove the marquee feature works — the
+# tests mock rembg. Only the end-to-end verify step confirms rembg actually
+# produces a cutout on a fresh clone; the VERIFY step may adjust these pins.
+#
+# numpy MUST stay <2 (rembg/onnxruntime built against numpy 1.x).
+rembg[cpu]>=2.0.57,<2.0.60
+onnxruntime>=1.17,<1.20
+numpy>=1.26,<2
+pillow>=11.0.0

@@ -1,38 +1,59 @@
-<!-- last_verified: 2026-03-10 -->
+<!-- last_verified: 2026-07-08 -->
 # App Workflows
 
-User journeys inside the application.
+User journeys inside Rembg Cutout Studio. The end-to-end story is
+**ingest → remove → review → serve**.
 
-## Upload Files
+## Ingest a single product
 
-- User navigates to `/upload`
-- Drops or selects files in the dropzone
-- Client validates file size (max 100MB) and type
-- Progress bar shows per-file upload status
-- On success: toast notification, green checkmark
-- On failure: red status icon with error message
-- User can clear completed uploads
-- See: [File Upload](features/file-upload.md)
+- User navigates to `/products/new`
+- Enters a SKU (e.g. `SKU-1001`), chooses a category and rembg model (selectors), optionally
+  a batch, and picks a product photo (JPEG/PNG/WebP)
+- Optionally flips "Remove background now" to run the cutout immediately
+- On submit: the original uploads to `products/originals/<sku>/…`, a catalog JSON is written
+  as `pending` (or `done` if removed now), and the user lands on the product detail page
+- See: [Product Catalog](features/product-catalog.md)
 
-## Browse and Manage Files
+## Ingest in bulk (CSV manifest)
 
-- User navigates to `/files`
-- Page loads file list from API (sorted most recent first)
-- Files displayed in tree view with folders and type-specific icons
-- Top-level folders auto-expand on load
-- Hover a file row to see action buttons (preview / download / delete)
-- **Preview**: opens dialog with image/PDF preview + metadata panel
-- **Download**: fetches presigned URL, browser downloads file
-- **Delete**: removes file from B2, row removed from tree, toast confirms
-- Empty bucket shows "No files found" with upload prompt
-- See: [File Browser](features/file-browser.md)
+- From `/products`, user clicks "Import CSV"
+- Uploads a `sku,category,batch,filename` CSV plus the matching image files
+- Each matched row registers a pending product; the dialog reports created/skipped counts
+- See: [Batch Ingest](features/batch-ingest.md)
 
-## View Dashboard
+## Remove backgrounds
 
-- User navigates to `/` (home)
-- Three parallel API calls load: stats, recent files, upload activity
-- Stats cards show: total files, storage used, uploads today, total downloads
-- Upload chart shows last 7 days of upload activity as bar chart
-- Recent uploads table shows last 10 files with filename, size, type, date
-- Empty state: "No files uploaded yet" messages
+- **Single**: on a product detail page, click "Remove background" (or "Re-run" to redo with a
+  different model). rembg runs locally; a transparent cutout + sidecar are written to B2 and
+  the status flips to `done`.
+- **Batch**: on `/products`, click "Process all pending" to run rembg across every pending
+  product sequentially — demonstrating continuous write amplification.
+- If the ML deps aren't installed, the app surfaces a clear 503 with the install command.
+- See: [Background Removal](features/background-removal.md)
+
+## Review before/after
+
+- On the product detail page, the original is shown beside the cutout rendered over a
+  transparency checkerboard so the removed background reads as transparent
+- The sidecar panel shows model, rembg version, processing time, dimensions, foreground
+  coverage (an honest proxy, not a confidence score), and alpha-matting
+- Edit metadata via a pre-filled dialog (SKU is read-only); delete removes only this SKU's
+  objects from B2
+
+## Serve / download
+
+- "Download cutout" fetches a presigned URL and downloads the transparent PNG
+- Previews use presigned URLs too; nothing requires the bucket to be public
+
+## View the dashboard
+
+- `/` shows Products, Cutouts produced (+ avg ms), Pending, and Cutout storage with an
+  amplification ratio vs. the originals, plus a cutouts-per-day chart and recent cutouts
 - See: [Dashboard](features/dashboard.md)
+
+## Browse the whole bucket
+
+- `/files` is the full-bucket explorer (tree view, preview, download, delete) — the reusable
+  B2 scaffolding, complementing the `products/`-scoped Catalog
+- `/upload` is the generic B2 upload surface
+- See: [File Browser](features/file-browser.md), [File Upload](features/file-upload.md)

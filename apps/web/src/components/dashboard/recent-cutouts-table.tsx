@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Inbox } from "lucide-react";
+import { ArrowRight, Scissors } from "lucide-react";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -14,36 +14,22 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorState } from "@/components/ui/error-state";
-import { useFiles } from "@/lib/queries";
+import { useProducts } from "@/lib/queries";
 import { formatDate } from "@/lib/utils";
 
-function mimeToLabel(mime: string) {
-  const map: Record<string, string> = {
-    "image/jpeg": "Image",
-    "image/png": "Image",
-    "image/gif": "Image",
-    "image/webp": "Image",
-    "application/pdf": "PDF",
-    "text/plain": "Text",
-    "text/csv": "CSV",
-    "application/json": "JSON",
-    "application/zip": "Archive",
-    "video/mp4": "Video",
-    "audio/mpeg": "Audio",
-  };
-  return map[mime] || "File";
-}
+export function RecentCutoutsTable() {
+  const { data: products = [], isLoading, error, refetch } = useProducts();
 
-export function RecentUploadsTable() {
-  const { data: files = [], isLoading, error, refetch } = useFiles("", 10);
+  // Newest cutouts first — products are already sorted by updated_at desc.
+  const recent = products.filter((p) => p.status === "done").slice(0, 8);
 
   return (
     <Card>
       <CardHeader className="border-b border-border py-4 px-5">
-        <CardTitle className="card-title">Recent Uploads</CardTitle>
+        <CardTitle className="card-title">Recent Cutouts</CardTitle>
         <CardAction className="self-center">
           <Link
-            href="/files"
+            href="/products"
             className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             View all
@@ -60,53 +46,49 @@ export function RecentUploadsTable() {
           </div>
         ) : error ? (
           <ErrorState error={error} onRetry={() => refetch()} />
-        ) : files.length === 0 ? (
+        ) : recent.length === 0 ? (
           <EmptyState
-            icon={Inbox}
-            title="No uploads yet"
-            description="Head to Upload to add your first files."
+            icon={Scissors}
+            title="No cutouts yet"
+            description="Create a product and run background removal to populate this list."
           />
         ) : (
           <Table className="table-fixed">
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead className="w-[34%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Filename
+                  SKU
                 </TableHead>
-                <TableHead className="w-[14%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Size
+                <TableHead className="w-[24%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Category
                 </TableHead>
-                <TableHead className="w-[14%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Type
+                <TableHead className="w-[20%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Model
                 </TableHead>
                 <TableHead className="w-[22%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Date
-                </TableHead>
-                <TableHead className="w-[16%] text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Status
+                  Updated
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {files.map((file) => (
-                <TableRow key={file.key} className="table-row-hover">
+              {recent.map((p) => (
+                <TableRow key={p.sku} className="table-row-hover">
                   <TableCell className="font-medium">
-                    <div className="truncate">{file.filename}</div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground tabular-nums whitespace-nowrap">
-                    {file.size_human}
+                    <Link
+                      href={`/products/${encodeURIComponent(p.sku)}`}
+                      className="truncate hover:underline"
+                    >
+                      {p.sku}
+                    </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground whitespace-nowrap">
-                    {mimeToLabel(file.content_type)}
+                    {p.category}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                    {p.model}
                   </TableCell>
                   <TableCell className="text-muted-foreground whitespace-nowrap">
-                    {formatDate(file.uploaded_at)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--success)]" />
-                      Complete
-                    </span>
+                    {formatDate(p.updated_at)}
                   </TableCell>
                 </TableRow>
               ))}

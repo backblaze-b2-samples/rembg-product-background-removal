@@ -1,130 +1,111 @@
-<!-- last_verified: 2026-05-01 -->
-# Vibe Coding Starter Kit
+<!-- last_verified: 2026-07-08 -->
+# Rembg Cutout Studio
 
-Stop wiring boilerplate and start building. This open-source starter kit gives vibe coders and AI coding agents a production-ready foundation — a full-stack TypeScript + Python template with a pre-built dashboard UI, file upload system, and **[Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)** cloud storage already integrated. Save thousands of tokens on setup prompts, skip the "build me a dashboard from scratch" loop, and go straight to building your app's unique features.
+Batch **product-image background removal** for e-commerce catalogs, print-on-demand
+platforms, and marketplace sellers. Original product photos land in
+**[Backblaze B2](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-rembg-cutouts)**;
+the app runs the open-source [**rembg**](https://github.com/danielgatis/rembg) (U²-Net family)
+library **locally** — no paid API, no second key — to produce a matched transparent-PNG
+cutout per image, writing the cutout plus a metadata sidecar back to B2. Every original
+generates a comparably-sized cutout, so stored volume roughly doubles as SKUs are onboarded —
+this sample makes that write-amplification visible on the dashboard.
 
-**What you get out of the box:**
-- Full-stack dashboard UI (Next.js 16 + React 19 + Tailwind v4 + shadcn/ui)
-- File upload with drag-and-drop, progress tracking, and metadata extraction
-- File browser with preview, download, and delete
-- FastAPI backend with strict layered architecture and structural tests
-- Agent-optimized docs — your AI coding agent can read the repo and start contributing immediately
+B2 is both the ingest landing zone and the durable system of record: originals, cutouts,
+sidecars, and a per-SKU catalog manifest all live as B2 objects, browsable from the app.
+There is **no database** — object layout + per-SKU catalog JSON *is* the state.
 
-## What it looks like
-
-**Dashboard** — stats, upload activity, and recent uploads at a glance:
-
-![Dashboard view showing stat cards, upload activity chart, and recent uploads table](docs/images/b2-starterkit-dashboard1.png)
-
-**File browser** — tree view with preview, download, and delete:
-
-![File browser view showing a tree of files with hover actions](docs/images/b2-starterkit-fileview2.png)
-
-## Agent-First Architecture
-
-This repo is optimized for coding agents. Use the template, point your agent at it, and start building.
-
-The structure follows the principle that **repository knowledge is the system of record**. Anything an agent can't access in-context doesn't exist — so everything it needs to reason about the codebase is versioned, co-located, and discoverable from the repo itself.
-
-### How it works
-
-**[AGENTS.md](AGENTS.md) is the single source of truth for all coding agents.** A ~100 line entry point gives agents the repository layout, architectural invariants, commands, conventions, and pointers to deeper docs. Agent-specific files (CLAUDE.md, etc.) are thin pointers back to AGENTS.md.
-
-**Architecture is enforced mechanically, not by convention.** Layering rules, import boundaries, file size limits, and SDK containment are verified by structural tests and lints that run on every change. When rules are enforceable by code, agents follow them reliably.
-
-**The knowledge base is structured for progressive disclosure:**
+## Workflow
 
 ```
-AGENTS.md              Single source of truth — layout, invariants, commands, conventions
-ARCHITECTURE.md        System layout, layering rules, data flows
-docs/
-  features/            Feature docs (inputs, outputs, flows, edge cases)
-  app-workflows.md     User journeys
-  dev-workflows.md     Engineering workflows and testing
-  SECURITY.md          Security principles
-  RELIABILITY.md       Reliability expectations
-  exec-plans/          Execution plans and tech debt tracker
+ingest → remove → store → serve
 ```
 
-### Key design decisions
+1. **Ingest** — create a product (SKU + photo) or batch-import a CSV manifest with many
+   images. The original uploads to `products/originals/<sku>/…` on B2.
+2. **Remove** — run rembg on one product ("Remove background") or every pending product
+   ("Process all pending"). Runs locally on CPU (GPU auto-detected if present).
+3. **Store** — the transparent-PNG cutout and a JSON sidecar are written back to B2 under
+   `products/cutouts/<sku>/…`; the per-SKU catalog manifest is updated.
+4. **Serve** — the detail page shows the before/after (original vs. cutout over a
+   transparency checkerboard) with presigned URLs; download the cutout with one click.
 
-| Principle | Implementation |
-|-----------|---------------|
-| Give agents a single source of truth | AGENTS.md ~100 lines — layout, invariants, commands, conventions |
-| Enforce invariants mechanically | Structural tests + ruff + ESLint verify boundaries |
-| DRY documentation | Each fact lives in one place; no redundant files to drift |
-| Strict layered architecture | `types -> config -> repo -> service -> runtime`, enforced by tests |
-| Prefer boring, composable libraries | stdlib logging over frameworks, Pydantic over ad-hoc validation |
-| Contain external SDKs | `boto3` only in `repo/` layer — verified by structural test |
-| Keep files agent-sized | 300-line limit per file, enforced by test |
-| Docs updated with code | Same-PR requirement prevents documentation rot |
-| Structured observability | JSON logging, `/metrics` endpoint, request tracing |
+## Features
 
-This approach draws from [OpenAI's experience building with Codex](https://openai.com/index/harness-engineering/): agents work best in environments with strict boundaries, predictable structure, and progressive context disclosure.
+- **Background removal (rembg / U²-Net)** — model selector (`u2net`, `u2netp`,
+  `isnet-general-use`, `u2net_human_seg`, `silueta`) + optional alpha-matting. Local, $0,
+  no API key. See [docs/features/background-removal.md](docs/features/background-removal.md).
+- **Product catalog CRUD** — the primary entity: create / read / edit / delete / run, all
+  from the UI. See [docs/features/product-catalog.md](docs/features/product-catalog.md).
+- **Batch ingest via CSV manifest** — upload `sku,category,batch,filename` plus images to
+  register thousands of SKUs at once. See [docs/features/batch-ingest.md](docs/features/batch-ingest.md).
+- **Batch background removal** — "Process all pending" runs rembg across every pending
+  product, demonstrating continuous write amplification.
+- **Before/after preview + sidecar metadata** — model, rembg version, processing ms,
+  dimensions, foreground-coverage proxy, alpha-matting.
+- **Domain dashboard** — Products, Cutouts produced, Pending, cutout storage vs. originals
+  with an amplification ratio, cutouts-per-day chart, and recent cutouts.
+- **Bucket explorer** ([`/files`](docs/features/file-browser.md)) and generic
+  [Upload](docs/features/file-upload.md) — the reusable B2 scaffolding, kept as-is.
+
+## B2 object layout (the durable "database")
+
+```
+products/originals/<sku>/<filename>        original product image
+products/cutouts/<sku>/<stem>.png          transparent cutout
+products/cutouts/<sku>/<stem>.json         sidecar { model, rembg_version, processing_ms,
+                                             width, height, foreground_ratio, alpha_matting,
+                                             created_at }
+products/catalog/<sku>.json                per-SKU manifest (editable metadata + status)
+```
+
+`foreground_ratio` is the fraction of pixels whose alpha is above threshold — an honest
+**coverage proxy**, not a model confidence score (rembg emits none; we do not fabricate one).
 
 ## Quick Start
 
-You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free **[Backblaze B2 account](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)**.
+You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free
+**[Backblaze B2 account](https://www.backblaze.com/cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-rembg-cutouts)**.
 
-### Start a new project
-
-**Option 1: GitHub Template (recommended)**
-
-Click the green **"Use this template"** button at the top of this repo, name your project, then:
-
-```bash
-git clone https://github.com/yourorg/my-cool-app.git
-cd my-cool-app
-```
-
-**Option 2: Clone and reinitialize**
-
-```bash
-git clone https://github.com/backblaze-b2-samples/vibe-coding-starter-kit.git my-cool-app
-cd my-cool-app
-rm -rf .git
-git init
-git add .
-git commit -m "Initial commit from vibe-coding-starter-kit"
-```
-
-Either way you get a clean project with no upstream history — ready to push to your own repo and point your agent at it.
-
-### Setup
-
-**1. Install dependencies**
+**1. Install frontend dependencies**
 
 ```bash
 pnpm install
 ```
 
-**2. Set up the backend**
+**2. Set up the backend (two-step install)**
+
+The core API installs fast and green **without** the heavy ML stack. Install the rembg
+engine separately:
 
 ```bash
 cd services/api
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt        # core API (no rembg)
+pip install -r requirements-ml.txt     # rembg + onnxruntime engine
 cd ../..
 ```
 
-**3. Add your B2 credentials**
+> **First-run model download:** the first cutout downloads the selected U²-Net model
+> (~176 MB for `u2net`) from GitHub to `~/.u2net/`. Network is required on first use only.
+> A green `pnpm test:api` does **not** prove the engine works — the tests mock rembg. Only an
+> actual end-to-end run confirms rembg produces a cutout on a fresh clone.
 
-Set up your local `.env`:
+**3. Add your B2 credentials**
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start) and:
+Open `.env` and fill in (from the
+[B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-rembg-cutouts)):
 
-1. **Create a bucket.** B2 will show two values — paste each into `.env`:
-   - **Bucket Unique Name** → `B2_BUCKET_NAME`
-   - **Endpoint** → `B2_ENDPOINT`
-2. **Create an application key** with `Read and Write` permission. B2 will show two values — paste each into `.env`:
-   - **keyID** → `B2_KEY_ID`
-   - **applicationKey** → `B2_APPLICATION_KEY` *(only shown once — paste it now)*
-
-> Want a walkthrough? See the docs for [creating a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) and [creating app keys](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys).
+| Variable | Where it comes from |
+|----------|---------------------|
+| `B2_APPLICATION_KEY_ID` | Application key **keyID** (`Read and Write`) |
+| `B2_APPLICATION_KEY` | Application **applicationKey** *(shown once)* |
+| `B2_BUCKET_NAME` | Bucket **Unique Name** |
+| `B2_REGION` | Bucket region, e.g. `us-west-004` — the S3 endpoint is derived as `https://s3.<region>.backblazeb2.com` |
+| `B2_PUBLIC_URL_BASE` | *Optional* — a public/CDN base URL. Presigned URLs work without it. |
 
 **4. Run it**
 
@@ -132,43 +113,16 @@ Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 d
 pnpm dev
 ```
 
-That's it. Frontend at `localhost:3000`, API at `localhost:8000`. Upload a file and see it working.
+Frontend at `localhost:3000`, API at `localhost:8000`. Create a product, upload a JPEG/PNG,
+keep model `u2net`, and run the cutout. `pnpm dev` runs `pnpm doctor` first — a preflight
+check for the common setup gotchas.
 
-`pnpm dev` runs `pnpm doctor` first — a preflight check that catches the common setup gotchas (wrong Node/Python version, missing venv, missing or placeholder `.env`, ports already taken) and tells you exactly how to fix each one. Run it standalone any time with `pnpm doctor`.
+## GPU / CPU
 
-## Building Your App
-
-When you adapt this kit for a new app, keep the shared scaffolding and only swap out what's app-specific:
-
-- **Keep** the UI kit (`apps/web/src/components/ui/` + design tokens in `globals.css` + `/design`).
-- **Keep** the File Explorer (`/files`) and Upload (`/upload`) pages and their sidebar nav entries — they're the reusable B2-backed surface.
-- **Adapt** the Dashboard (`/`) to your use case — replace the default stats, chart, and recent uploads with metrics that reflect what your app actually does.
-- **Rebrand** by editing a single file: `apps/web/src/lib/app-config.ts` holds the app name and description (`APP_NAME`, `APP_DESCRIPTION`). Changing them there updates the page title, sidebar, and breadcrumb everywhere — no other files to touch.
-
-Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AGENTS.md#2-building-on-this-starter-kit).
-
-## Core Features
-
-- [File Upload](docs/features/file-upload.md) — drag-and-drop upload with real-time progress
-- [File Browser](docs/features/file-browser.md) — list, preview, download, delete files
-- [Dashboard](docs/features/dashboard.md) — stats cards, upload chart, recent uploads
-- [Metadata Extraction](docs/features/metadata-extraction.md) — image dimensions, EXIF, PDF info, checksums
-- [Design System](docs/design-system.md) — tokens, primitives, AI elements, the blaze generating loader, and inline `ErrorState` / `EmptyState` patterns. Live preview at `/design`.
-- Inline error handling — fetch failures surface *what's wrong* (API offline, 401, 5xx) and offer a Retry, instead of silently rendering empty state.
-- Single-source config — one `.env` at the repo root powers both API and web app, validated at startup so misconfig fails fast with a readable message.
-- Centralized data layer — every fetch goes through TanStack Query hooks in `apps/web/src/lib/queries.ts`; cache invalidation is one call after a mutation.
-- Structural tests — verify layering rules, import boundaries, SDK containment, file size limits
-- Structured JSON logging — every request traced with `request_id` and timing
-- `/health` endpoint — B2 connectivity check
-- `/metrics` endpoint — Prometheus-format counters (request count, latency, uploads)
-
-## Tech Stack
-
-- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts
-- TanStack Query — caching, dedup, retry, stale-while-revalidate for every fetch
-- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow, PyPDF2
-- Backblaze B2 (S3-compatible object storage)
-- pnpm workspaces (monorepo)
+Background removal is `deployment: local`. **CPU is the default; a GPU is auto-detected and
+never required.** At runtime the app picks onnxruntime execution providers: `CUDA` if
+available, otherwise `CPU`. Apple CoreML/MPS is flaky for U²-Net and is **opt-in only** via
+`REMBG_PROVIDERS` (e.g. `REMBG_PROVIDERS=CoreMLExecutionProvider,CPUExecutionProvider`).
 
 ## Commands
 
@@ -180,9 +134,17 @@ Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AG
 | `pnpm build` | Build frontend |
 | `pnpm lint` | Lint frontend |
 | `pnpm lint:api` | Lint backend (ruff) |
-| `pnpm test:api` | Run backend tests |
+| `pnpm test:api` | Run backend tests (rembg mocked — see note above) |
 | `pnpm check:structure` | Verify layering rules |
-| `pnpm test:e2e` | Playwright e2e tests (run `pnpm --filter @vibe-coding-starter-kit/web exec playwright install chromium` once first) |
+| `pnpm test:e2e` | Playwright e2e tests (run `pnpm --filter @rembg-product-background-removal/web exec playwright install chromium` once first) |
+
+## Tech Stack
+
+- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts, TanStack Query
+- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow
+- **rembg** (U²-Net family) + onnxruntime — local, keyless background removal
+- Backblaze B2 (S3-compatible object storage) as ingest zone + system of record
+- pnpm workspaces (monorepo)
 
 ## Documentation Map
 
@@ -190,17 +152,13 @@ Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AG
 |-----|---------|
 | [AGENTS.md](AGENTS.md) | Agent table of contents — start here |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System layout, layering, data flows |
-| [docs/features/](docs/features/) | Feature docs (upload, browser, dashboard, metadata) |
-| [docs/design-system.md](docs/design-system.md) | Design tokens, primitives, AI elements, loader, error/empty states |
+| [docs/features/](docs/features/) | Feature docs (background removal, catalog, batch ingest, upload, browser, dashboard, metadata) |
+| [docs/design-system.md](docs/design-system.md) | Design tokens, primitives, loader, error/empty states |
 | [docs/app-workflows.md](docs/app-workflows.md) | User journeys |
 | [docs/dev-workflows.md](docs/dev-workflows.md) | Engineering workflows and testing |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security principles |
 | [docs/RELIABILITY.md](docs/RELIABILITY.md) | Reliability expectations |
 | [docs/exec-plans/](docs/exec-plans/) | Execution plans and tech debt tracker |
-
-## Contributing
-
-Start with [AGENTS.md](AGENTS.md). It's the map — everything else is discoverable from there.
 
 ## License
 
@@ -208,6 +166,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Claude Agent B2 Skill
 
-Manage Backblaze B2 from your terminal using natural language (list/search, audits, stale or large file detection, security checks, safe cleanup).
+Manage Backblaze B2 from your terminal using natural language (list/search, audits, stale or
+large file detection, security checks, safe cleanup).
 
 Repo: [https://github.com/backblaze-b2-samples/claude-skill-b2-cloud-storage](https://github.com/backblaze-b2-samples/claude-skill-b2-cloud-storage)

@@ -367,6 +367,28 @@ table[data-slot="table"] th {
   font-variant-numeric: tabular-nums;
 }
 
+/* Transparency checkerboard — backing for RGBA cutouts so a removed
+   background reads as transparent (not white/black). Used by the catalog
+   thumbnails and the before/after viewer. */
+.checkerboard {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(-45deg, #e5e7eb 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #e5e7eb 75%),
+    linear-gradient(-45deg, transparent 75%, #e5e7eb 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+.dark .checkerboard {
+  background-color: #1f2937;
+  background-image:
+    linear-gradient(45deg, #374151 25%, transparent 25%),
+    linear-gradient(-45deg, #374151 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #374151 75%),
+    linear-gradient(-45deg, transparent 75%, #374151 75%);
+}
+
 /* Primary button — subtle top highlight + soft focus halo. */
 button[data-slot="button"].bg-primary {
   background-image: linear-gradient(180deg,

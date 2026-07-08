@@ -7,29 +7,44 @@ This is the authoritative control surface for all coding agents. Read this first
 
 ```
 apps/web/          Next.js 16 frontend (App Router, Tailwind v4, shadcn/ui)
+  src/app/products/          Catalog list / new / [sku] detail routes
+  src/components/catalog/    Product table, form, detail (before/after), remove/batch/import
+  src/components/dashboard/  Catalog stats cards, cutout chart, recent cutouts
 services/api/      FastAPI backend (layered: types/config/repo/service/runtime)
+  app/service/removal.py     rembg (U²-Net) engine wrapper — lazy-imports the ML stack
+  app/service/catalog*.py    Product lifecycle + stats over the B2 object layout
+  app/runtime/catalog.py     /products router (CRUD + run + import + stats)
+  requirements-ml.txt        Heavy ML deps (rembg, onnxruntime) — installed separately
 packages/shared/   Shared TypeScript types
 docs/              System of record (features, workflows, security, reliability)
 docs/exec-plans/   Execution plans and tech debt tracker
 infra/railway/     Deployment config
 ```
 
-## 2. Building on This Starter Kit
+**This app: Rembg Cutout Studio** — batch product-image background removal with rembg,
+storing originals, cutouts, sidecars, and a per-SKU catalog on Backblaze B2. There is no
+database; the B2 object layout + per-SKU catalog JSON is the system of record (see
+[ARCHITECTURE.md](ARCHITECTURE.md)).
 
-When this repo is used as the foundation for a new app, the following pieces are part of the starter contract — keep them. Adapt only what the new use case actually requires.
+## 2. What this app added vs. the starter kit
 
-**Keep as-is (do not strip, rename, or replace)**
+This sample was built on the vibe-coding-starter-kit. The following is the contract for
+future changes.
+
+**Keep as-is (reusable B2 scaffolding — do not strip, rename, or replace)**
 - **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly. Restyling happens through tokens in `globals.css`.
-- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry in `apps/web/src/components/layout/app-sidebar.tsx` stays.
+- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry stays. This is the full-bucket browser.
 - **Upload.** `/upload` route, `apps/web/src/app/upload/`, and `apps/web/src/components/upload/`. The Upload sidebar entry stays.
-- The sidebar nav itself (Dashboard, Upload, Files, Settings, plus the Design System utility link).
+- **Generic metadata extraction** (`service/metadata.py` + `components/files/file-metadata-panel.tsx`) serves the generic upload/files surface — distinct from the purpose-built cutout sidecar.
 
-**Adapt to the new use case**
-- **Dashboard.** `/` route and `apps/web/src/components/dashboard/` (stats cards, upload chart, recent uploads table) are illustrative defaults. Replace them with metrics, charts, and tables that reflect what the new app actually does (e.g. transcripts processed, embeddings indexed, classifications run). New aggregations must flow through the same `runtime -> service -> repo` layering and be exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
-- Update `docs/features/dashboard.md` in the same PR as any dashboard change (see §9).
+**This app's additions (the sample-specific surface)**
+- **Catalog** (`/products`, `/products/new`, `/products/[sku]`) — the primary-entity explorer scoped to `products/`. Complements the full-bucket `/files` explorer.
+- **Background-removal engine** (`service/removal.py`) — rembg/U²-Net, lazy-imported, CPU-default/GPU-autodetect. ML deps live in `requirements-ml.txt`.
+- **Catalog service + router** (`service/catalog*.py`, `runtime/catalog.py`) over the B2 object layout — no database.
+- **Dashboard** (`/` + `components/dashboard/`) was rewritten to catalog metrics (products, cutouts, pending, storage/amplification, cutouts-per-day). New aggregations flow through the same `runtime -> service -> repo` layering and TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
 
 **Why this contract exists**
-- The UI kit, Files, and Upload pages are the reusable B2-backed scaffolding that makes this a starter kit — stripping them defeats the purpose. The dashboard is the only screen explicitly designed to be rewritten per app.
+- The UI kit, Files, and Upload pages are the reusable B2-backed scaffolding — stripping them defeats the purpose. The Catalog + removal engine are this sample's reason to exist.
 
 ## 3. Architectural Invariants
 

@@ -1,4 +1,4 @@
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type { FileMetadata } from "@rembg-product-background-removal/shared";
 
 export interface TreeFolder {
   type: "folder";

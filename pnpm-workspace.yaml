@@ -1,7 +1,11 @@
 packages:
   - "apps/*"
   - "packages/*"
+# Dependencies allowed to run install/build scripts (pnpm blocks all by
+# default and records discovered ones here). Everything below ships or
+# verifies a native binary and is safe to build on a fresh clone.
 allowBuilds:
+  esbuild: true
   msw: true
   sharp: true
   unrs-resolver: true
