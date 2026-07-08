@@ -14,6 +14,24 @@ B2 is both the ingest landing zone and the durable system of record: originals, 
 sidecars, and a per-SKU catalog manifest all live as B2 objects, browsable from the app.
 There is **no database** — object layout + per-SKU catalog JSON *is* the state.
 
+## What it looks like
+
+**Dashboard** — catalog metrics (products, cutouts produced, pending, cutout-vs-original storage with an amplification ratio), a 7-day cutouts-produced chart, and recent cutouts.
+
+![Dashboard with catalog metrics, a cutouts-per-day chart, and recent cutouts](docs/images/dashboard.png)
+
+**Catalog** — the `products/` explorer: every SKU with a transparent-cutout thumbnail, category, model, and status, plus batch CSV import and "Process all pending".
+
+![Product catalog table with cutout thumbnails and per-SKU status](docs/images/catalog.png)
+
+**New product** — register an SKU with its photo, pick a U²-Net model, and optionally run the cutout immediately on upload.
+
+![New product form with SKU, image upload, model selector, and alpha-matting toggle](docs/images/new-product.png)
+
+**Product detail** — before/after (original vs. transparent-PNG cutout over a transparency checkerboard) with the sidecar metadata: model, rembg version, processing time, dimensions, and foreground-coverage proxy.
+
+![Product detail showing the before/after cutout over a transparency checkerboard with sidecar metadata](docs/images/product-detail.png)
+
 ## Workflow
 
 ```
